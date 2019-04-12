@@ -1,0 +1,96 @@
+    AWSTemplateFormatVersion: 2010-09-09
+    Resources:
+      WorkSpacesVPC:
+        Type: 'AWS::EC2::VPC'
+        Properties:
+          CidrBlock: 10.100.0.0/16
+          EnableDnsSupport: 'true'
+          EnableDnsHostnames: 'true'
+      ADVPC:
+        Type: 'AWS::EC2::VPC'
+        Properties:
+          CidrBlock: 10.101.0.0/16
+          EnableDnsSupport: 'true'
+          EnableDnsHostnames: 'true'
+
+      WorkSpacesSubnet:
+        Type: 'AWS::EC2::Subnet'
+        Properties:
+          CidrBlock: 10.100.0.0/24
+          AvailabilityZone: !Select 
+            - '0'
+            - !GetAZs 
+              Ref: 'AWS::Region'
+          VpcId: !Ref WorkSpacesVPC
+      ADSubnet:
+        Type: 'AWS::EC2::Subnet'
+        Properties:
+          CidrBlock: 10.101.0.0/24
+          AvailabilityZone: !Select 
+            - '0'
+            - !GetAZs 
+              Ref: 'AWS::Region'
+          VpcId: !Ref ADVPC
+
+      InetGW:
+        Type: 'AWS::EC2::InternetGateway'
+        Properties: {}
+      InetGWAttach:
+        Type: 'AWS::EC2::VPCGatewayAttachment'
+        Properties:
+          InternetGatewayId: !Ref InetGW
+          VpcId: !Ref WorkSpacesVPC
+
+      PublicRouteTable:
+        Type: 'AWS::EC2::RouteTable'
+        Properties:
+          VpcId: !Ref WorkSpacesVPC
+      ADRouteTable:
+        Type: 'AWS::EC2::RouteTable'
+        Properties:
+          VpcId: !Ref ADVPC
+
+      PublicRoute:
+        Type: 'AWS::EC2::Route'
+        Properties:
+          RouteTableId: !Ref PublicRouteTable
+          DestinationCidrBlock: 0.0.0.0/0
+          GatewayId: !Ref InetGW
+      PeerRoute:
+        Type: 'AWS::EC2::Route'
+        Properties:
+          RouteTableId: !Ref PublicRouteTable
+          DestinationCidrBlock: 10.101.0.0/16
+          VpcPeeringConnectionId: !Ref VPCPeeringConnection
+      PublicRouteTableAttach:
+        Type: 'AWS::EC2::SubnetRouteTableAssociation'
+        Properties:
+          SubnetId: !Ref WorkSpacesSubnet
+          RouteTableId: !Ref PublicRouteTable
+      ADRoute:
+        Type: 'AWS::EC2::Route'
+        Properties:
+          RouteTableId: !Ref ADRouteTable
+          DestinationCidrBlock: 10.100.0.0/16
+          VpcPeeringConnectionId: !Ref VPCPeeringConnection
+      ADTableAttach:
+        Type: 'AWS::EC2::SubnetRouteTableAssociation'
+        Properties:
+          SubnetId: !Ref ADSubnet
+          RouteTableId: !Ref ADRouteTable
+
+      Webserver:
+        Type: 'AWS::EC2::Instance'
+        Properties:
+          ImageId: ami-0f9ae750e8274075b
+          InstanceType: t2.micro
+          NetworkInterfaces:
+            - AssociatePublicIpAddress: 'true'
+              DeviceIndex: '0'
+              SubnetId: !Ref WorkSpacesSubnet
+
+      VPCPeeringConnection:
+        Type: 'AWS::EC2::VPCPeeringConnection'
+        Properties:
+          VpcId: !Ref WorkSpacesVPC
+          PeerVpcId: !Ref ADVPC
